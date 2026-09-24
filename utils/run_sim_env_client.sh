@@ -15,9 +15,15 @@ env_gpu_id="${11}"
 policy_server_ip="${12:-localhost}"
 protocol="${13:-ws}"
 
+source /home/u2023312921/miniforge3/etc/profile.d/conda.sh
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda deactivate || true
 conda activate "${eval_env_conda_env}"
+
+# RMBench records eval videos through ffmpeg. The rmbench environment ships
+# imageio-ffmpeg's binary, but does not expose its directory on PATH.
+ffmpeg_dir="$(python -c 'import os, imageio_ffmpeg; print(os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe()))')"
+export PATH="${ffmpeg_dir}:${PATH}"
 
 echo -e "\033[34m[CLIENT] Activating Conda environment: ${eval_env_conda_env}\033[0m"
 echo -e "\033[34m[CLIENT] Connecting to server ${policy_server_ip}:${policy_server_port}...\033[0m"

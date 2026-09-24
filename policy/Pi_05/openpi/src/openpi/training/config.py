@@ -5,6 +5,7 @@ from collections.abc import Sequence
 import dataclasses
 import difflib
 import logging
+import os
 import pathlib
 from typing import Any, Literal, Protocol, TypeAlias
 
@@ -34,6 +35,22 @@ import openpi.transforms as _transforms
 _ROBODOJO_ASSETS_DIR = pathlib.Path(__file__).resolve().parents[3] / "assets" / "RoboDojo_assets"
 # Norm stats for Tianji Marvin + Wuji Hand (written by compute_norm_stats).
 _WUJI_ASSETS_DIR = pathlib.Path(__file__).resolve().parents[3] / "assets" / "Wuji_assets"
+
+# RMBench Pi05 LoRA defaults. The repo id can be overridden by the XPolicyLab
+# wrapper without changing this config. Norm stats use the same repo id.
+_RMBENCH_PI05_REPO_ID = os.environ.get(
+    "OPENPI_RMBENCH_REPO_ID",
+    "XPolicyLab-observe_and_pickup-aloha_agilex-joint",
+)
+_RMBENCH_PI05_LORA_MODEL = pi0_config.Pi0Config(
+    pi05=True,
+    paligemma_variant="gemma_2b_lora",
+    action_expert_variant="gemma_300m_lora",
+)
+_RMBENCH_PI05_CHECKPOINT = os.environ.get(
+    "OPENPI_PI05_CHECKPOINT",
+    "gs://openpi-assets/checkpoints/pi05_base/params",
+)
 
 ModelType: TypeAlias = _model.ModelType
 # Work around a tyro issue with using nnx.filterlib.Filter directly.
@@ -632,6 +649,46 @@ class TrainConfig:
 
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
+    TrainConfig(
+        name="pi05_rmbench_lora_observe_and_pickup",
+        model=_RMBENCH_PI05_LORA_MODEL,
+        freeze_filter=_RMBENCH_PI05_LORA_MODEL.get_freeze_filter(),
+        data=LeRobotAlohaDataConfig(
+            repo_id=_RMBENCH_PI05_REPO_ID,
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                            "prompt": "prompt",
+                        }
+                    )
+                ]
+            ),
+            base_config=DataConfig(prompt_from_task=True),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader(_RMBENCH_PI05_CHECKPOINT),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=250,
+            peak_lr=1.0e-4,
+            decay_steps=10_000,
+            decay_lr=1.0e-5,
+        ),
+        ema_decay=None,
+        batch_size=8,
+        num_workers=4,
+        num_train_steps=10_000,
+        log_interval=10,
+        save_interval=500,
+        keep_period=2_500,
+        fsdp_devices=1,
+    ),
     TrainConfig(
         name="pi05_base_aloha_full_sim_arx-x5_seed_0",
         model=pi0_config.Pi0Config(pi05=True),

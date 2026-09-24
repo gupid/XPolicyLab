@@ -18,8 +18,15 @@ XPL_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BENCH_ROOT="$(cd "${XPL_ROOT}/.." && pwd)"
 UTILS_DIR="${XPL_ROOT}/utils"
 
+# This script is launched through setsid from eval.sh, so the parent's conda
+# shell function is not inherited. Initialize conda before resolving the venv.
+source /home/u2023312921/miniforge3/etc/profile.d/conda.sh
+
 policy_name="$(basename "${SCRIPT_DIR}")"
-yaml_file="${XPL_ROOT}/policy/${policy_name}/deploy.yml"
+yaml_file="${PI05_DEPLOY_CONFIG:-${XPL_ROOT}/policy/${policy_name}/deploy.yml}"
+if [[ "${yaml_file}" != /* ]]; then
+    yaml_file="${SCRIPT_DIR}/${yaml_file}"
+fi
 
 action_dim=$(bash "${UTILS_DIR}/get_action_dim.sh" "${BENCH_ROOT}" "${env_cfg_type}")
 

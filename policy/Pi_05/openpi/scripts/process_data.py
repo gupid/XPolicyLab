@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import shutil
 import argparse
@@ -7,16 +8,21 @@ import h5py
 import dataclasses
 from pathlib import Path
 from typing import Any, Literal
-import random
 from tqdm import tqdm
 
 from XPolicyLab.utils.load_file import load_yaml, load_json
-from XPolicyLab.utils.process_data import decode_image_bit
+from XPolicyLab.utils.process_data import decode_image_bit, pack_robot_state
 
-from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+try:
+    from lerobot.datasets.lerobot_dataset import HF_LEROBOT_HOME
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+except ModuleNotFoundError as exc:
+    if exc.name != "lerobot.datasets":
+        raise
+    from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
+    from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
-ROOT_PATH = Path(__file__).parent.parent.parent.parent.parent
+ROOT_PATH = Path(__file__).resolve().parents[5]
 
 CAMERA_ALIASES = {
     "cam_head": "cam_high",
@@ -41,6 +47,7 @@ def create_empty_dataset(
     fps: int,
     mode: Literal["video", "image"] = "image",
     *,
+    camera_shapes: dict[str, tuple[int, int, int]],
     dataset_config: DatasetConfig = DEFAULT_DATASET_CONFIG,
     robot_action_dim_info: dict = None,
 ) -> LeRobotDataset:
@@ -65,11 +72,11 @@ def create_empty_dataset(
         },
     }
 
-    for camera_name in CAMERA_ALIASES.values():
+    for camera_name, camera_shape in camera_shapes.items():
         features[f"observation.images.{camera_name}"] = {
             "dtype": mode,
-            "shape": (3, 480, 640),
-            "names": ["height", "width", "channels"],
+            "shape": camera_shape,
+            "names": ["channels", "height", "width"],
         }
 
     output_path = HF_LEROBOT_HOME / repo_id
@@ -89,39 +96,103 @@ def create_empty_dataset(
     )
 
 def _load_compressed_images(group: h5py.Group, key: str) -> np.ndarray:
-    return np.asarray(decode_image_bit(group[key]))
+    return np.asarray(decode_image_bit(group[key][:]))
 
-def _make_action_from_state(state: np.ndarray) -> np.ndarray:
-    action = np.empty_like(state, dtype=np.float32)
-    if len(state) == 1:
-        action[0] = state[0]
-        return action
 
-    action[:-1] = state[1:]
-    action[-1] = state[-1]
-    return action
-
-def load_data(ep_path) -> dict[str, Any]:
+def _load_camera_shapes(ep_path: Path) -> dict[str, tuple[int, int, int]]:
+    shapes = {}
     with h5py.File(ep_path, "r") as ep:
-        right_state = np.concatenate(
-            [ep["state/right_arm_joint_states"][:], ep["state/right_ee_joint_states"][:][:, None]],
-            axis=1,
-        )
-        left_state = np.concatenate(
-            [ep["state/left_arm_joint_states"][:], ep["state/left_ee_joint_states"][:][:, None]],
-            axis=1,
-        )
-        state = np.concatenate([left_state, right_state], axis=1).astype(np.float32)
-        action = _make_action_from_state(state)
+        if "vision" in ep:
+            for source_name, output_name in CAMERA_ALIASES.items():
+                source_shape = tuple(int(dim) for dim in ep[f"vision/{source_name}/shape"][:])
+                if len(source_shape) != 3 or source_shape[-1] != 3:
+                    raise ValueError(f"Unsupported camera shape for {source_name}: {source_shape}")
+                height, width, channels = source_shape
+                shapes[output_name] = (channels, height, width)
+        elif "observation" in ep:
+            native_aliases = {
+                "head_camera": "cam_high",
+                "left_camera": "cam_left_wrist",
+                "right_camera": "cam_right_wrist",
+            }
+            for source_name, output_name in native_aliases.items():
+                sample = decode_image_bit(ep[f"observation/{source_name}/rgb"][0])
+                if sample.ndim != 3 or sample.shape[-1] != 3:
+                    raise ValueError(f"Unsupported camera shape for {source_name}: {sample.shape}")
+                height, width, channels = sample.shape
+                shapes[output_name] = (channels, height, width)
+        else:
+            raise ValueError(f"Unsupported HDF5 layout in {ep_path}")
+    return shapes
 
-        images = {}
-        for source_name, output_name in CAMERA_ALIASES.items():
-            if source_name in ep["vision"]:
-                images[output_name] = _load_compressed_images(ep["vision"][source_name], "colors")
-        try:
-            instructions = ep["instructions"]
-        except KeyError:
+def _load_instructions(ep: h5py.File) -> list[str] | None:
+    if "instructions" not in ep:
+        return None
+
+    value = ep["instructions"][()]
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    if isinstance(value, str):
+        value = json.loads(value)
+    if isinstance(value, np.ndarray):
+        value = value.tolist()
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("instructions must decode to a string list")
+    return value or None
+
+
+def load_data(ep_path, action_type: str, robot_action_dim_info: dict) -> dict[str, Any]:
+    with h5py.File(ep_path, "r") as ep:
+        if "state" in ep and "action" in ep:
+            state = pack_robot_state(
+                {"state": ep["state"]},
+                action_type,
+                robot_action_dim_info,
+                source_type="dataset",
+                state_type="state",
+            ).astype(np.float32)
+            action = pack_robot_state(
+                {"action": ep["action"]},
+                action_type,
+                robot_action_dim_info,
+                source_type="dataset",
+                state_type="action",
+            ).astype(np.float32)
+
+            images = {}
+            for source_name, output_name in CAMERA_ALIASES.items():
+                if source_name in ep["vision"]:
+                    images[output_name] = _load_compressed_images(ep["vision"][source_name], "colors")
+            instructions = _load_instructions(ep)
+        elif "joint_action" in ep and "observation" in ep:
+            # Native RMBench recordings store observations only.  Use adjacent
+            # qpos frames as the supervised state/action pair without changing
+            # the source HDF5 file.
+            qpos = np.asarray(ep["joint_action/vector"], dtype=np.float32)
+            if qpos.ndim != 2 or qpos.shape[-1] != 14 or qpos.shape[0] < 2:
+                raise ValueError(f"Unsupported native RMBench qpos shape: {qpos.shape}")
+            state, action = qpos[:-1], qpos[1:]
+            native_aliases = {
+                "head_camera": "cam_high",
+                "left_camera": "cam_left_wrist",
+                "right_camera": "cam_right_wrist",
+            }
+            images = {
+                output_name: decode_image_bit(ep[f"observation/{source_name}/rgb"][:])[:-1]
+                for source_name, output_name in native_aliases.items()
+            }
             instructions = None
+        else:
+            raise ValueError(f"Unsupported HDF5 layout in {ep_path}")
+
+    if instructions is None:
+        instruction_path = ep_path.parent.parent / "instructions" / f"{ep_path.stem}.json"
+        if instruction_path.exists():
+            with instruction_path.open(encoding="utf-8") as instruction_file:
+                value = json.load(instruction_file)
+            instructions = value if isinstance(value, list) else [str(value)]
 
     return {
         "images": images,
@@ -166,6 +237,12 @@ def main():
         default="Do your job.",
         help="Default instruction when not present in HDF5",
     )
+    parser.add_argument(
+        "--raw-data-root",
+        type=Path,
+        default=None,
+        help="Directory containing raw task directories; defaults to data/<bench_name>",
+    )
     args = parser.parse_args()
 
     bench_name = args.bench_name
@@ -189,36 +266,63 @@ def main():
     env_cfg = load_yaml(os.path.join(ROOT_PATH, "./env_cfg", f"{env_cfg_type}.yml"))
     robot_type = env_cfg['config']['robot']
 
-    robot_action_dim_info = robot_action_dim_info = load_json(os.path.join(ROOT_PATH, "env_cfg/robot", "_robot_info.json"))[robot_type]
+    robot_action_dim_info = load_json(
+        os.path.join(ROOT_PATH, "env_cfg/robot", "_robot_info.json")
+    )[robot_type]
 
+    raw_data_root = args.raw_data_root or Path(ROOT_PATH) / "data" / str(bench_name)
+    episode_files = []
+    for raw_task_dir in raw_task_dirs:
+        # XPolicyLab data uses <task>/<robot>/data; native RMBench exports use
+        # <task>/demo_clean/data.  Accept both layouts while keeping the source
+        # directory read-only.
+        candidate_dirs = [
+            raw_data_root / raw_task_dir / str(env_cfg_type),
+            raw_data_root / raw_task_dir / str(env_cfg_type) / "data",
+            raw_data_root / raw_task_dir / "demo_clean",
+            raw_data_root / raw_task_dir / "demo_clean" / "data",
+            raw_data_root / raw_task_dir,
+            raw_data_root / raw_task_dir / "data",
+        ]
+        for load_data_dir in candidate_dirs:
+            task_episode_files = sorted(load_data_dir.glob("data/episode*.hdf5"))
+            if not task_episode_files:
+                task_episode_files = sorted(load_data_dir.glob("episode*.hdf5"))
+            if task_episode_files:
+                episode_files.extend(task_episode_files)
+                break
+    if expert_data_num is not None:
+        episode_files = episode_files[:expert_data_num]
+    if not episode_files:
+        raise FileNotFoundError(
+            f"No HDF5 episodes found under {raw_data_root} for tasks {raw_task_dirs} "
+            f"and environment {env_cfg_type}."
+        )
+
+    print(f"Loading {len(episode_files)} episodes from {raw_data_root}")
+    camera_shapes = _load_camera_shapes(episode_files[0])
+    print(f"Camera shapes: {camera_shapes}")
     dataset = create_empty_dataset(
         repo_id=repo_id,
         robot_type=robot_type,
         fps=50, # pi default to 50
         mode=mode,
+        camera_shapes=camera_shapes,
         dataset_config=DEFAULT_DATASET_CONFIG,
         robot_action_dim_info=robot_action_dim_info,
     )
 
-    episode_files = []
-    for raw_task_dir in raw_task_dirs:
-        load_data_dir = Path(ROOT_PATH) / "data" / str(bench_name) / raw_task_dir / str(env_cfg_type)
-        task_episode_files = sorted(load_data_dir.glob("data/episode_*.hdf5"))
-        if not task_episode_files:
-            task_episode_files = sorted(load_data_dir.glob("*.hdf5"))
-        episode_files.extend(task_episode_files)
-    if expert_data_num is not None:
-        episode_files = episode_files[:expert_data_num]
     for ep_file in tqdm(episode_files, desc="Processing episodes", unit="episode"):
         try:
-            data = load_data(ep_file)
+            data = load_data(ep_file, action_type, robot_action_dim_info)
             num_frames = data["state"].shape[0]
+            task = instruction if data["instructions"] is None else data["instructions"][0]
 
             for i in range(num_frames):
                 frame = {
                     "observation.state": data["state"][i],
                     "action": data["action"][i],
-                    "task": instruction if data["instructions"] is None else random.choice(data["instructions"]),
+                    "task": task,
                 }
                 for camera_name, images in data["images"].items():
                     frame[f"observation.images.{camera_name}"] = images[i]
@@ -229,7 +333,7 @@ def main():
             dataset.hf_dataset = dataset.create_hf_dataset()
             tqdm.write(f"Finished {ep_file.name} with {num_frames} frames")
         except Exception as e:
-            tqdm.write(f"Error processing episode {ep_file}: {e}")
+            raise RuntimeError(f"Error processing episode {ep_file}: {e}") from e
 
 if __name__ == "__main__":
     main()

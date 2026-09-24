@@ -17,6 +17,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Current Dir
 XPL_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 UTILS_DIR="${XPL_ROOT}/utils"
 
+if [[ -n "${PI05_DEPLOY_CONFIG:-}" && "${PI05_DEPLOY_CONFIG}" != /* ]]; then
+    PI05_DEPLOY_CONFIG="${SCRIPT_DIR}/${PI05_DEPLOY_CONFIG}"
+    export PI05_DEPLOY_CONFIG
+fi
+if [[ -n "${PI05_DEPLOY_CONFIG:-}" && ! -f "${PI05_DEPLOY_CONFIG}" ]]; then
+    echo "[MAIN][ERROR] Pi05 deploy config not found: ${PI05_DEPLOY_CONFIG}" >&2
+    exit 1
+fi
+
 SERVER_SCRIPT="${SCRIPT_DIR}/setup_eval_policy_server.sh"
 CLIENT_SCRIPT="${SCRIPT_DIR}/setup_eval_env_client.sh"
 
@@ -33,6 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+echo "[MAIN] deploy_config=${PI05_DEPLOY_CONFIG:-${SCRIPT_DIR}/deploy.yml}"
 echo "[MAIN] start server, policy_server_port=${policy_server_port}"
 
 setsid bash "${SERVER_SCRIPT}" \

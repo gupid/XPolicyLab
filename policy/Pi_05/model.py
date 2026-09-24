@@ -106,7 +106,19 @@ class Model(ModelTemplate):
 
         config = _config.get_config(train_config_name)
         norm_stats = None
-        if repo_id is not None:
+        norm_stats_path = model_cfg.get("norm_stats_path") or os.environ.get("PI05_NORM_STATS_PATH")
+        if norm_stats_path:
+            norm_stats_path = Path(os.path.expanduser(str(norm_stats_path)))
+            if not norm_stats_path.is_absolute():
+                norm_stats_path = (_POLICY_DIR / norm_stats_path).resolve()
+            # OpenPI normally receives the directory containing norm_stats.json,
+            # but accepting the JSON file itself makes deploy YAML overrides less
+            # error-prone.
+            if norm_stats_path.is_file() or norm_stats_path.name == "norm_stats.json":
+                norm_stats = _normalize.deserialize_json(norm_stats_path.read_text())
+            else:
+                norm_stats = _normalize.load(norm_stats_path)
+        elif repo_id is not None:
             norm_stats = _normalize.load(model_root / "assets" / str(repo_id))
 
         return _policy_config.create_trained_policy(config, str(model_root), norm_stats=norm_stats)

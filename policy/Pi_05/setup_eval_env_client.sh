@@ -18,7 +18,10 @@ BENCH_ROOT="$(cd "${XPL_ROOT}/.." && pwd)"
 UTILS_DIR="${XPL_ROOT}/utils"
 
 policy_name="$(basename "${SCRIPT_DIR}")"
-yaml_file="${XPL_ROOT}/policy/${policy_name}/deploy.yml"
+yaml_file="${PI05_DEPLOY_CONFIG:-${XPL_ROOT}/policy/${policy_name}/deploy.yml}"
+if [[ "${yaml_file}" != /* ]]; then
+    yaml_file="${SCRIPT_DIR}/${yaml_file}"
+fi
 
 echo "[CLIENT] policy=${policy_name}, task=${task_name}, server=${policy_server_ip}:${policy_server_port}"
 

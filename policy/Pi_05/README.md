@@ -29,6 +29,9 @@ bash process_data.sh RoboDojo stack_bowls arx_x5 joint
 
 # Example: create a 50-episode ablation while reading from the original task data
 bash process_data.sh RoboDojo stack_bowls_50ep arx_x5 joint 50 stack_bowls
+
+# RMBench observe_and_pickup data collected in data/XPolicyLab/
+bash process_data.sh XPolicyLab observe_and_pickup aloha_agilex joint
 ```
 
 ## Training
@@ -56,9 +59,48 @@ bash eval.sh RoboDojo stack_bowls RoboDojo-cotrain-arx_x5-joint-0 arx_x5 joint 0
 
 `EVAL_ENV_TYPE=debug` runs the offline wiring check (no simulator); leave it unset or set `EVAL_ENV_TYPE=sim` for RoboDojo simulation. For split-machine deployment via `setup_eval_policy_server.sh` / `setup_eval_env_client.sh`, follow the [Deployment Flow](../../README.md#-deployment-flow).
 
+### RMBench base vs. LoRA evaluation
+
+The RMBench-specific YAML files keep the two comparisons reproducible:
+
+- `deploy_rmbench_base.yml` loads the downloaded official `pi05_base` parameters.
+- `deploy_rmbench_lora.yml` loads the fine-tuned run and selects its final checkpoint.
+
+Both use the same three-camera observation adapter, 14-D `aloha_agilex` joint state,
+and the RMBench normalization statistics. Select one YAML with
+`PI05_DEPLOY_CONFIG`; the variable is inherited by both the policy server and the
+environment client.
+
+```bash
+cd XPolicyLab/policy/Pi_05
+export EVAL_ENV_TYPE=sim
+
+# Unadapted official pi05_base.
+export PI05_DEPLOY_CONFIG=deploy_rmbench_base.yml
+bash eval.sh RMBench observe_and_pickup base aloha_agilex joint 0 0 0 uv RMBench
+
+# LoRA fine-tuned checkpoint (the YAML currently selects step 9999).
+export PI05_DEPLOY_CONFIG=deploy_rmbench_lora.yml
+bash eval.sh RMBench observe_and_pickup lora aloha_agilex joint 0 0 0 uv RMBench
+```
+
+The `base`/`lora` value is only the XPolicyLab run label in these two configs; the
+actual weights come from `model_path`. If training stops at a different final step,
+change `checkpoint_num` in `deploy_rmbench_lora.yml` before evaluation. Keep task,
+robot, action type, seed, environment mode, and simulator episode settings identical
+between the two commands when comparing results. Results are written to the separate
+`eval_result/observe_and_pickup/Pi_05/demo_clean/base/` and
+`eval_result/observe_and_pickup/Pi_05/demo_clean/lora/` directories by the RMBench
+client. The YAML `result_dir` fields are retained for adapter metadata but are not
+currently consumed by that client.
+
+For a split-machine run, export the same `PI05_DEPLOY_CONFIG` on both sides. Start
+the policy server with the YAML selected and a reachable host, then start the client
+with the server IP as described in the XPolicyLab deployment documentation.
+
 ## Configuration
 
-`deploy.yml` keys to check before evaluation: `checkpoint_num`, `result_dir`, `obs_transform_pipeline`, `policy_uv_env_path`, `train_config_name` (must match the config used by `train.sh`), `repo_id`.
+`deploy.yml` keys to check before evaluation: `checkpoint_num`, `result_dir`, `obs_transform_pipeline`, `policy_uv_env_path`, `train_config_name` (must match the config used by `train.sh`), `repo_id`, `model_path`, and `norm_stats_path`. `norm_stats_path` may point to either the directory containing `norm_stats.json` or the JSON file itself.
 
 Environment variables used by the adapter scripts:
 
@@ -68,6 +110,44 @@ Environment variables used by the adapter scripts:
 | `OPENPI_FSDP_DEVICES` | Overrides the FSDP device count passed to OpenPI training. |
 | `OPENPI_TRAIN_CONFIG_NAME` | Overrides the training config; defaults to `pi05_base_aloha_full_sim_arx-x5_seed_0`. |
 | `OPENPI_DATA_MODE` | Data-processing mode passed to `openpi/scripts/process_data.py`; defaults to `image`. |
+| `OPENPI_RAW_DATA_ROOT` | Overrides the exact raw bench directory read by `process_data.sh` (for this dataset, the default is `<RMBench>/data/XPolicyLab`). |
+| `OPENPI_NUM_TRAIN_STEPS` | Overrides the config's training-step count; useful for a short smoke run. |
+| `OPENPI_WANDB_ENABLED` | Set to `false` to disable W&B entirely; defaults to `true`. |
+| `OPENPI_OVERWRITE` | Whether to replace an existing run directory; defaults to `true` for backward compatibility. |
+| `OPENPI_RESUME` | Set to `true` to resume an existing run; cannot be combined with overwrite. |
 | `OPENPI_LOCAL_CACHE_ROOT` | Per-host local cache root for the HF datasets / JAX compilation caches; defaults to `/tmp/openpi-cache-$(hostname)`. |
+| `PI05_DEPLOY_CONFIG` | Evaluation YAML override; relative paths resolve from `policy/Pi_05/`. |
+| `PI05_NORM_STATS_PATH` | Optional model-side override for normalization stats when the YAML does not set `norm_stats_path`. |
 
 `OPENPI_ROOT` and `OPENPI_SRC` are additional overrides consumed by the local scripts.
+
+## RMBench 40GB LoRA configuration
+
+The vendored OpenPI code includes a dedicated `pi05_rmbench_lora_observe_and_pickup`
+config for a single 40GB A100. It uses the official `pi05_base` checkpoint, freezes
+the base Gemma parameters, and trains LoRA adapters in both the language and action
+expert modules. The config assumes a 14D ALOHA-style joint state/action padded to
+the model's 32D action space and the three OpenPI camera slots (`cam_high`, both
+wrist cameras). It is intentionally a configuration-only addition; `train.sh` does
+not select it unless `OPENPI_TRAIN_CONFIG_NAME` is set.
+
+Convert the HDF5 data, compute normalization statistics for that same LeRobot repo,
+and then run training. Keep the `bench_name`, task, environment, and action arguments
+identical so all three stages resolve `XPolicyLab-observe_and_pickup-aloha_agilex-joint`:
+
+```bash
+cd XPolicyLab/policy/Pi_05
+bash process_data.sh XPolicyLab observe_and_pickup aloha_agilex joint
+
+export OPENPI_TRAIN_CONFIG_NAME=pi05_rmbench_lora_observe_and_pickup
+export OPENPI_RMBENCH_REPO_ID=XPolicyLab-observe_and_pickup-aloha_agilex-joint
+export OPENPI_LEROBOT_REPO_ID="$OPENPI_RMBENCH_REPO_ID"
+
+cd openpi
+uv run scripts/compute_norm_stats.py --config-name "$OPENPI_TRAIN_CONFIG_NAME"
+cd ..
+
+bash train.sh XPolicyLab observe_and_pickup aloha_agilex joint 0 0
+```
+
+The current training implementation logs to Weights & Biases, not TensorBoard.

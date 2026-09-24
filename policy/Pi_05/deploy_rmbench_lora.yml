@@ -1,0 +1,23 @@
+# RMBench evaluation config for the LoRA fine-tuned pi05 checkpoint.
+policy_name: Pi_05
+protocol: ws
+host: localhost
+bench_name: null
+task_name: null
+env_cfg_type: null
+seed: null
+eval_batch: false
+
+# The final 10k-step run writes the last checkpoint at step 9999.
+checkpoint_num: 9999
+result_dir: "./eval_result/pi05_rmbench/lora/"
+obs_transform_pipeline: "xspark-v1.0"
+
+action_type: joint
+policy_uv_env_path: openpi
+train_config_name: pi05_rmbench_lora_observe_and_pickup
+repo_id: XPolicyLab-observe_and_pickup-aloha_agilex-joint
+model_path: ./checkpoints/XPolicyLab-observe_and_pickup-aloha_agilex-joint-0
+norm_stats_path: openpi/assets/pi05_rmbench_lora_observe_and_pickup/XPolicyLab-observe_and_pickup-aloha_agilex-joint
+
+port: 6000
