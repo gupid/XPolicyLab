@@ -1,0 +1,13 @@
+# Pi_05 local training and evaluation outputs
+/checkpoints/
+/wandb/
+/outputs/
+
+# Local Python and tooling caches
+/.ruff_cache/
+/__pycache__/
+**/__pycache__/
+/.pytest_cache/
+/openpi/.venv/
+/openpi/.venv.failed-evdev/
+/local_jobs/

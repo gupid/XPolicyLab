@@ -19,6 +19,10 @@
         "arm_dim": [6, 6],
         "ee_dim": [1, 1]
     },
+    "franka_single": {
+        "arm_dim": [7],
+        "ee_dim": [1]
+    },
     "franka": {
         "arm_dim": [7, 7],
         "ee_dim": [1, 1]

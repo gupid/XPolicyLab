@@ -420,7 +420,7 @@ def _insert_rgb_marker(jpeg_bytes: bytes) -> bytes:
     return jpeg_bytes[:offset] + segment + jpeg_bytes[offset:]
 
 
-def _decode_single_image_bit(image_bit):
+def _decode_single_image_bit(image_bit, source_format="auto"):
     """Decode one encoded image buffer into an HWC uint8 RGB array."""
     image_bit = _normalize_image_buffer(image_bit)
 
@@ -436,18 +436,18 @@ def _decode_single_image_bit(image_bit):
     # it needs the swap; a legacy buffer stores reversed channels that imdecode
     # has already reversed back, so swapping it is what would break the order.
     # Either way the caller gets RGB, which is why no caller ever swaps.
-    if _has_rgb_marker(image_bit):
+    if source_format == "standard" or _has_rgb_marker(image_bit):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     return image
 
 
-def _decode_image_bit_sequence(image_bits):
+def _decode_image_bit_sequence(image_bits, source_format="auto"):
     frames = []
 
     for index, image_bit in enumerate(image_bits):
         try:
-            frames.append(decode_image_bit(image_bit))
+            frames.append(decode_image_bit(image_bit, source_format=source_format))
         except ValueError as exc:
             raise ValueError(f"Frame {index}: {exc}") from exc
 
@@ -457,9 +457,14 @@ def _decode_image_bit_sequence(image_bits):
     return np.stack(frames, axis=0)
 
 
-def decode_image_bit(image_bits):
+def decode_image_bit(image_bits, *, source_format="auto"):
     """
     Decode encoded image bit stream(s) into uint8 RGB image array(s).
+
+    ``source_format="standard"`` explicitly imports conforming JPEG buffers from
+    external producers that do not write the XPL marker. Use only when the
+    source schema specifies standard JPEG; the default ``"auto"`` preserves
+    existing XPolicyLab marker/legacy behavior. Callers never swap channels.
 
     The output is RGB for both stored byte formats — the legacy
     channel-reversed streams and the standard RGB JPEGs written by
@@ -503,27 +508,29 @@ def decode_image_bit(image_bits):
     Raises:
         ValueError: if any buffer fails to decode.
     """
+    if source_format not in {"auto", "standard"}:
+        raise ValueError(f"Unsupported image source_format: {source_format!r}")
     if isinstance(image_bits, (bytes, bytearray, memoryview, str)):
-        return _decode_single_image_bit(image_bits)
+        return _decode_single_image_bit(image_bits, source_format)
 
     if isinstance(image_bits, np.ndarray):
         if image_bits.dtype.kind in {"S", "U", "O"}:
             if image_bits.ndim == 0:
-                return _decode_single_image_bit(image_bits.item())
-            return _decode_image_bit_sequence(image_bits)
+                return _decode_single_image_bit(image_bits.item(), source_format)
+            return _decode_image_bit_sequence(image_bits, source_format)
 
         if image_bits.dtype == np.uint8:
             if image_bits.ndim == 1:
-                return _decode_single_image_bit(image_bits)
+                return _decode_single_image_bit(image_bits, source_format)
             if image_bits.ndim == 2:
-                return _decode_image_bit_sequence(image_bits)
+                return _decode_image_bit_sequence(image_bits, source_format)
 
         return image_bits
 
     if isinstance(image_bits, (list, tuple)):
-        return _decode_image_bit_sequence(image_bits)
+        return _decode_image_bit_sequence(image_bits, source_format)
 
-    return _decode_single_image_bit(image_bits)
+    return _decode_single_image_bit(image_bits, source_format)
 
 
 # Color fields of one camera in an observation. 'depth' is deliberately absent:
