@@ -1,0 +1,75 @@
+{
+  "official_repository": "https://github.com/Robbyant/lingbot-va",
+  "official_revision": "7c6ffa9bfc4b83582cafc860fab4c82cc7deeeeb",
+  "official_files": {
+    "wan_va/__init__.py": "82548e574a8b43d4bb1480e915ea993b526ed9f5fb761f8e65fdcaca601838e8",
+    "wan_va/configs/shared_config.py": "e7989a7c793e10ca81e1dc731aa66d55c4cdb8632f9c06a55371a567c18aa570",
+    "wan_va/configs/va_demo_cfg.py": "65707ff4c57e13c9ac66e87e3e7c2477618e26a7e80cb4a0300b238e7e2bd44c",
+    "wan_va/configs/va_demo_i2va.py": "c1133c46dedf386193a3d4654e879fe6d6453edaaa287ea963e148f13127bf7c",
+    "wan_va/configs/va_demo_train_cfg.py": "7022e4d23e60986489db57a88153987761d935ea181b0d0397ca25290db9b578",
+    "wan_va/configs/va_franka_cfg.py": "86452cea3fc4949d539ed2022ab903420dffe6d82c20c4d4cd64f3954cf6cd3f",
+    "wan_va/configs/va_franka_i2va.py": "d84297e7bcc2227368e3e097982cc2bb8827ba3db1dba508c6f52809e7283172",
+    "wan_va/configs/va_libero_cfg.py": "cddcdc3dee6e31c63160efad40ace4717474d2682a6df894ddc4cef0b4954a37",
+    "wan_va/configs/va_libero_i2va.py": "3093b78f540e6c57ae5cd9bc75f51f39a22e437256f94e9bdda5c61430d9fd34",
+    "wan_va/configs/va_libero_train_cfg.py": "fcb92781027a68a4bf06ec08cfd4ca7575ff8040b496a94d21636c36c3b0d104",
+    "wan_va/configs/va_robotwin_cfg.py": "554bea2089fa7037b407fbc89a2af65a1e7bc6b944b612e32c0366887943c0e1",
+    "wan_va/configs/va_robotwin_i2va.py": "b33f161e42f597907498dd55619b726cd256b199b2334dac8383c05771799a1e",
+    "wan_va/configs/va_robotwin_train_cfg.py": "d7ffd1eb2c341e128491edb00f453ef8e313c66bee251dea413db8d1d397363c",
+    "wan_va/dataset/__init__.py": "b66a083629ce810dd99b240c5b220450b8d71c975bf1877153998f6fc3d04ecd",
+    "wan_va/dataset/lerobot_latent_dataset.py": "984b20899e87c914f491f10c23608f06cb815c56112bdd929e39e187c89566ee",
+    "wan_va/distributed/__init__.py": "013ec40a0739296f1ba474036e5d46e06998f795daa0b7c3214773d885a3ab1a",
+    "wan_va/distributed/fsdp.py": "cf5c7755e934f933645235f9104cae3ff9adea2b2863bcb1a5ec42eb6f3a8d8f",
+    "wan_va/distributed/util.py": "2513e68bcc1163424a7629ec88ce7a9b70c11342945d4ff0dc1801310d1e1648",
+    "wan_va/modules/__init__.py": "7de311f2f55aed977114d312b7a4f22c26a451aa4e5685040a37e20533d3d8b1",
+    "wan_va/modules/model.py": "f65fdca5f28b327bfc89ca082a7b55eee3fb4ab1ffc469c642a075920e6f4487",
+    "wan_va/modules/utils.py": "563499ae1aa9fdbe990963c8c133423241f1a63d3f59743b778a1eb4c47757f4",
+    "wan_va/utils/Simple_Remote_Infer/deploy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wan_va/utils/Simple_Remote_Infer/deploy/image_tools.py": "aa8ca88152654c3973042e49339d08f47e927fc5ecc885ec9a114d90f726ebc8",
+    "wan_va/utils/Simple_Remote_Infer/deploy/msgpack_numpy.py": "c37345c1d0ae4a0f27d91af4798af842986c255e7aa93b08255471cd3393eab1",
+    "wan_va/utils/Simple_Remote_Infer/deploy/qwenpi_policy.py": "447d6c071b6a3f6718cbf53fd79b9d851a52feebbf2587df184a101778623a33",
+    "wan_va/utils/Simple_Remote_Infer/deploy/replay_policy.py": "2369969eef4a89e85b84d53e7db4b529525f3d347bd8df50f551071b86633b84",
+    "wan_va/utils/Simple_Remote_Infer/deploy/websocket_policy_server.py": "441423a7ed7382c656247f51e1d53117252b6c92c802a175f8d5d6ec86db3d76",
+    "wan_va/utils/__init__.py": "c04beb288fa33eb00ee2362cc3a312d0614877d2afdb47c272ee76978731aaf5",
+    "wan_va/utils/logging.py": "3f894f412c096b15692b9adc5a3c4496447aee7e32a86f09562276fcbc2c7fd5",
+    "wan_va/utils/scheduler.py": "9833300936d1001e5dfb0db76d5e0e131429685980de7b3c9716288ec28da7f1",
+    "wan_va/utils/sever_utils.py": "d61e653a1541fc829786fcce61cb29e828407b0b1014f555c56c950d2d646e44",
+    "wan_va/utils/utils.py": "7d81e83d799b338db61e08bd52976fea404ed7db497d93199d4a478c592d2465",
+    "script/run_va_posttrain.sh": "0f46446a7c15eac0458ffcc3ee1b3f32ceaca1db68795c32557793ffd521679d"
+  },
+  "adapter_exceptions": {
+    "wan_va/configs/__init__.py": {
+      "reason": "Registers the XPolicyLab LoRA training config.",
+      "vendor_sha256": "233b21bd06bb148f75b3cec1037b88bce9e65a6f4b08b7e4bb4eeacdda113182"
+    },
+    "wan_va/configs/va_robotwin30_train_cfg.py": {
+      "reason": "XPolicyLab-specific robot/action/camera/norm/training configuration; not an official default and opt-in only.",
+      "vendor_sha256": "9f1c412807c20c78580de7f87236d2464b7a945a68d692b524937b539ad21522"
+    },
+    "wan_va/utils/Simple_Remote_Infer/deploy/websocket_client_policy.py": {
+      "reason": "Existing inference client adaptation, outside the training entrypoint. No inference equivalence is claimed.",
+      "vendor_sha256": "0edf9bf2623ad12a4d43e6a656d2227cd715d3b3cf156d291fe9dcf164c794a9",
+      "official_sha256": "39b306a47e582716eb4e4cb9333f2f7ef2a66a1f3c39d65d1674770ec3ed6e53"
+    },
+    "wan_va/train.py": {
+      "reason": "LoRA integration for the XPolicyLab real-world training path; exports merged Diffusers checkpoints.",
+      "vendor_sha256": "1cd73f54bafdea489ff94297f1d5ef95852bc4c1118e71114423f56a4a803924"
+    },
+    "wan_va/lora.py": {
+      "reason": "XPolicyLab dependency-free LoRA module and merged checkpoint export helpers.",
+      "vendor_sha256": "d363315c43f62d4d8d574a92fec4402c44c2d1ac2f6e5e5abeb58cb17a54d4c5"
+    },
+    "wan_va/real_world_dataset.py": {
+      "reason": "Real-world frozen-cache loader, train-only statistics and causal 8-to-30 action/mask alignment.",
+      "vendor_sha256": "96c32b709dd25ee3ef155e19fae5555e96d596c9eb91484306d7d9410a589501"
+    },
+    "wan_va/configs/va_real_world_lora_cfg.py": {
+      "reason": "Opt-in prepared Franka LoRA configuration and inference statistics.",
+      "vendor_sha256": "aee4d9e6015817233b432372f29594ba4df3313a581b9b5e2f046766c3436cde"
+    },
+    "wan_va/wan_va_server.py": {
+      "reason": "Real-world history actions use the same clipping and zero padding as training; other configurations retain upstream behavior.",
+      "official_sha256": "9c2a427611db487fea5cf40f184b713bf2088e533990ee00fdcd020d2668b4bf",
+      "vendor_sha256": "6e90e42965fa9d724fea84fa8fb32671813897ba85280a9430935a406dcd37be"
+    }
+  }
+}

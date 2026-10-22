@@ -6,3 +6,14 @@ visualization/sim/
 lingbot_va/lingbot_va_ckpt.zip
 lingbot_va/assets/*.mp4
 data/*
+checkpoints/
+
+# Local jobs and generated reports
+/local_jobs/
+/outputs/
+
+# Local Python and tooling caches
+/.ruff_cache/
+/__pycache__/
+**/__pycache__/
+/.pytest_cache/

@@ -237,6 +237,9 @@ class VA_Server:
                 self.actions_q99 - self.actions_q01 + 1e-6) * 2. - 1.
         else:
             raise NotImplementedError
+        if getattr(self.job_config, 'dataset_type', None) == 'real_world_cached':
+            action_model_input = action_model_input.clamp(-1.5, 1.5)
+            action_model_input *= self.action_mask[:, None, None]
         return action_model_input.unsqueeze(0).unsqueeze(-1)  # B, C, F, H, W
 
     def postprocess_action(self, action):

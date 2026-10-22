@@ -70,7 +70,21 @@ def ensure_hwc_uint8(image):
     raise ValueError(f"Unsupported image shape: {image.shape}")
 
 
-def encode_obs(observation, action_type, robot_action_dim_info, default_prompt):
+def encode_obs(observation, action_type, robot_action_dim_info, default_prompt, real_world=False):
+    if real_world:
+        import cv2
+        images = {}
+        for camera in ('camera_1', 'camera_2'):
+            image = ensure_hwc_uint8(extract_image(observation, [camera]))
+            if image.shape[:2] != (224, 224):
+                h, w = image.shape[:2]
+                if min(h, w) < 640:
+                    raise ValueError('Real-world input must be prepared 224x224 or an image at least 640x640')
+                image = image[(h - 640) // 2:(h + 640) // 2, (w - 640) // 2:(w + 640) // 2]
+                image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+            images[f'observation.images.{camera}'] = image
+        images['task'] = observation.get('instruction') or observation.get('prompt') or default_prompt
+        return images
     images = {
         "cam_high": ensure_hwc_uint8(
             extract_image(observation, ["cam_high", "cam_head", "head_camera", "top_camera"])
@@ -121,6 +135,9 @@ class Model(ModelTemplate):
 
         config_name = self.model_cfg.get("config_name", DEFAULT_CONFIG_NAME)
         self.job_config = VA_CONFIGS[config_name]
+        self.is_real_world = getattr(self.job_config, 'dataset_type', None) == 'real_world_cached'
+        if self.is_real_world and self.action_type != 'ee':
+            raise ValueError('Real-world LoRA outputs delta end-effector actions; set action_type: ee')
         self.obs_cam_keys = list(self.job_config.obs_cam_keys)
         self.action_dim = int(self.job_config.action_dim)
         self.action_per_frame = int(self.job_config.action_per_frame)
@@ -223,13 +240,21 @@ class Model(ModelTemplate):
 
         if action.ndim == 3:
             action = np.transpose(action, (1, 2, 0)).reshape(-1, action.shape[0])
-        elif action.ndim == 2 and action.shape[0] == self.action_dim:
+        elif action.ndim == 2 and action.shape[0] == (len(self.job_config.used_action_channel_ids)
+                                                     if self.is_real_world else self.action_dim):
             action = action.T
 
         return action
 
     def _convert_to_joint_control_chunk(self, action_chunk):
         action_chunk = np.asarray(action_chunk)
+
+        if self.is_real_world:
+            if action_chunk.ndim != 2 or action_chunk.shape[1] not in (8, 30):
+                raise ValueError(f'Expected real-world actions (N, 8/30), got {action_chunk.shape}')
+            if action_chunk.shape[1] == 30:
+                action_chunk = action_chunk[:, self.job_config.used_action_channel_ids]
+            return action_chunk
 
         if action_chunk.ndim != 2:
             raise ValueError(f"Expected action chunk with ndim=2, got shape {action_chunk.shape}.")
@@ -381,7 +406,7 @@ class Model(ModelTemplate):
     def update_obs_batch(self, obs_list):
         self._latest_env_idx_list = [obs.get("env_idx", index) for index, obs in enumerate(obs_list)]
         encoded_obs_list = [
-            encode_obs(obs, self.action_type, self.robot_action_dim_info, self.default_prompt)
+            encode_obs(obs, self.action_type, self.robot_action_dim_info, self.default_prompt, self.is_real_world)
             for obs in obs_list
         ]
         self.observation_window = encoded_obs_list

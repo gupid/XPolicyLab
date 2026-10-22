@@ -15,6 +15,10 @@ CHECKPOINT_PATH="${CHECKPOINT_PATH:?set CHECKPOINT_PATH to your LingBot-VA check
 BASE_MODEL_PATH="${BASE_MODEL_PATH:?set BASE_MODEL_PATH to your lingbot-va-base weights dir}"
 CONFIG_NAME="${CONFIG_NAME:-robotwin30_train}"
 MASTER_PORT="${MASTER_PORT:-29501}"
+if [[ "${CONFIG_NAME}" == real_world_lora_train ]]; then
+  export LINGBOT_VA_REAL_METADATA="${LINGBOT_VA_REAL_METADATA:-${CHECKPOINT_PATH}/real_world_metadata.json}"
+  test -f "${LINGBOT_VA_REAL_METADATA}" || { echo "Missing real-world normalization metadata: ${LINGBOT_VA_REAL_METADATA}" >&2; exit 2; }
+fi
 
 # set +u
 # source "$(conda info --base)/etc/profile.d/conda.sh"

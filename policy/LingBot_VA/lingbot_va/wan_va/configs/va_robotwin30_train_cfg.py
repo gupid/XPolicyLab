@@ -138,3 +138,19 @@ va_robotwin30_train_cfg.warmup_steps = 10
 va_robotwin30_train_cfg.batch_size = 1
 va_robotwin30_train_cfg.gradient_accumulation_steps = 8
 va_robotwin30_train_cfg.num_steps = 5000
+
+# Self-attention LoRA plus full action heads (docs/LORA.md).
+va_robotwin30_lora_train_cfg = EasyDict(__name__="Config: VA robotwin30 LoRA train")
+va_robotwin30_lora_train_cfg.update(va_robotwin30_train_cfg)
+va_robotwin30_lora_train_cfg.lora_enabled = True
+va_robotwin30_lora_train_cfg.lora_rank = 16
+va_robotwin30_lora_train_cfg.lora_alpha = 16
+va_robotwin30_lora_train_cfg.lora_dropout = 0.05
+va_robotwin30_lora_train_cfg.lora_target_modules = (
+    "attn1.to_q,attn1.to_k,attn1.to_v,attn1.to_out.0"
+)
+va_robotwin30_lora_train_cfg.lora_train_modules = (
+    "action_embedder,action_proj_out,condition_embedder_action.time_embedder,"
+    "condition_embedder_action.time_proj"
+)
+va_robotwin30_lora_train_cfg.learning_rate = 1e-4

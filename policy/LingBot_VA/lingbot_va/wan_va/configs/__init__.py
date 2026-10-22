@@ -10,7 +10,8 @@ from .va_demo_i2va import va_demo_i2va_cfg
 from .va_libero_cfg import va_libero_cfg
 from .va_libero_train_cfg import va_libero_train_cfg
 from .va_libero_i2va import va_libero_i2va_cfg
-from .va_robotwin30_train_cfg import va_robotwin30_train_cfg
+from .va_robotwin30_train_cfg import va_robotwin30_train_cfg, va_robotwin30_lora_train_cfg
+from .va_real_world_lora_cfg import va_real_world_lora_cfg
 
 VA_CONFIGS = {
     'robotwin': va_robotwin_cfg,
@@ -25,4 +26,6 @@ VA_CONFIGS = {
     'libero_train': va_libero_train_cfg,
     'libero_i2av': va_libero_i2va_cfg,
     'robotwin30_train': va_robotwin30_train_cfg,
+    'robotwin30_lora_train': va_robotwin30_lora_train_cfg,
+    'real_world_lora_train': va_real_world_lora_cfg,
 }

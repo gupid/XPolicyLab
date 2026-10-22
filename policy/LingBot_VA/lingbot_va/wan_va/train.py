@@ -33,6 +33,10 @@ from einops import rearrange
 from modules.utils import (
     load_transformer,
 )
+try:
+    from .lora import apply_lora, apply_lora_checkpointing, merge_lora_state_dict
+except ImportError:  # direct ``python wan_va/train.py`` compatibility
+    from lora import apply_lora, apply_lora_checkpointing, merge_lora_state_dict
 from utils import (
     init_logger, 
     logger, 
@@ -88,8 +92,20 @@ class Trainer:
             attn_mode="flex"
         )
 
+        self.lora_enabled = bool(getattr(config, 'lora_enabled', False))
+        if self.lora_enabled:
+            self.lora_targets = apply_lora(
+                self.transformer,
+                rank=int(config.lora_rank),
+                alpha=float(config.lora_alpha),
+                target_modules=config.lora_target_modules,
+                dropout=float(getattr(config, 'lora_dropout', 0.0)),
+                train_modules=getattr(config, 'lora_train_modules', ()),
+            )
+            logger.info("LoRA targets: %s", self.lora_targets)
+
         logger.info("Setting up activation checkpointing ...")
-        apply_ac(self.transformer)
+        (apply_lora_checkpointing if self.lora_enabled else apply_ac)(self.transformer)
 
         logger.info("Setting up FSDP...")
         shard_fn = shard_model
@@ -101,7 +117,8 @@ class Trainer:
             eval_mode=False,
         )
         self.transformer.train()
-        self.transformer.requires_grad_(True)
+        if not self.lora_enabled:
+            self.transformer.requires_grad_(True)
 
         # Optimizer
         self.optimizer = torch.optim.AdamW(
@@ -119,7 +136,11 @@ class Trainer:
 
         # Setup dataloaders
         logger.info("Setting up datasets...")
-        train_dataset = MultiLatentLeRobotDataset(config=config)
+        if getattr(config, 'dataset_type', None) == 'real_world_cached':
+            from wan_va.real_world_dataset import RealWorldLatentDataset
+            train_dataset = RealWorldLatentDataset(config)
+        else:
+            train_dataset = MultiLatentLeRobotDataset(config=config)
         train_sampler = DistributedSampler(
             train_dataset,
             num_replicas=config.world_size,
@@ -253,6 +274,27 @@ class Trainer:
             input_dict[key] = value.to(self.device)#.to(self.dtype)
         return input_dict
 
+    @torch.no_grad()
+    def validate_real_world(self):
+        """Fixed-noise held-out flow loss, without changing the training RNG stream."""
+        from wan_va.real_world_dataset import RealWorldLatentDataset
+        dataset = RealWorldLatentDataset(self.config, split='val')
+        model = getattr(self, 'engine', self.transformer)
+        was_training = model.training
+        totals = torch.zeros(2, device=self.device)
+        model.eval()
+        try:
+            with torch.random.fork_rng(devices=[self.device.index]):
+                torch.manual_seed(20261022)
+                for batch in DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0):
+                    inputs = self._prepare_input_dict(self.convert_input_format(batch))
+                    losses = self.compute_loss(inputs, model(inputs, train_mode=True))
+                    totals += torch.stack(losses) * self.gradient_accumulation_steps
+        finally:
+            model.train(was_training)
+        values = (totals / len(dataset)).tolist()
+        return dict(step=self.step, val_video_loss=values[0], val_action_loss=values[1], val_windows=len(dataset))
+
     def compute_loss(self,
         input_dict,
         pred
@@ -335,6 +377,9 @@ class Trainer:
                 self.transformer,
                 options=StateDictOptions(full_state_dict=True, cpu_offload=True),
             )
+            if self.lora_enabled:
+                state_dict = merge_lora_state_dict(
+                    state_dict, int(self.config.lora_rank), float(self.config.lora_alpha))
             state_dict_bf16 = {k: v.to(torch.bfloat16) for k, v in state_dict.items()}
             # optim_state = get_optimizer_state_dict(
             #         self.transformer, self.optimizer,
@@ -490,6 +535,12 @@ class Trainer:
                         }, step=self.step)
                 
                 self.step += 1
+
+                if getattr(self.config, 'validation_interval', 0) and self.step % self.config.validation_interval == 0:
+                    metrics = self.validate_real_world()
+                    if self.config.rank == 0:
+                        with (Path(self.config.save_root) / 'validation.jsonl').open('a') as stream:
+                            stream.write(json.dumps(metrics) + '\n')
                 
                 if self.step % self.config.save_interval == 0:
                     if self.config.rank == 0:

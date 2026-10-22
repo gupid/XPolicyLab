@@ -19,7 +19,8 @@ conda activate "${CONDA_ENV}"
 
 pip install torch==2.9.0 torchvision==0.24.0 torchaudio==2.9.0 --index-url https://download.pytorch.org/whl/cu126
 pip install websockets einops diffusers==0.36.0 transformers==4.55.2 accelerate msgpack opencv-python matplotlib ftfy easydict
-pip install packaging ninja
+pip install packaging ninja pandas pyarrow scipy wandb
+DS_BUILD_OPS=0 pip install --no-build-isolation deepspeed==0.18.5
 pip install flash-attn --no-build-isolation
 pip install lerobot==0.3.3 scipy wandb --no-deps
 
